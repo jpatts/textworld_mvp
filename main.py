@@ -1,4 +1,4 @@
-import os
+import os, spacy
 import tensorflow as tf
 import numpy as np
 from datetime import datetime
@@ -10,7 +10,7 @@ tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 tf.enable_eager_execution()
 
 # Hyperparams
-vocab_size = 2
+vocab_size = 20200
 embedding_size = 1
 epochs = 100
 
@@ -28,14 +28,22 @@ class Model(tf.keras.Model):
 model = Model(vocab_size, embedding_size)
 optim = tf.keras.optimizers.Adam(0.01)
 
-# Create dataset
-input_output_mapping = {'apple': 'pickup'}
-word2vec = {0:'apple', 1:'pickup'}
-x = np.array([0])
-one_hot = np.array([[0, 1]])
+# Load vocab
+nlp = spacy.load('en')
+with open('./vocab.txt') as f:
+    vocab = f.read().split('\n')
+# Create tokenized dicts
+word2vec = {}
+vec2word = {}
+for i, w in enumerate(vocab):
+    word2vec[w] = i
+    vec2word[i] = w
+
+x = np.array([word2vec['apple']])
+one_hot = tf.one_hot([word2vec['pickup']], depth=vocab_size)
 
 logits = model(x)
-print(word2vec[tf.argmax(logits, axis=1).numpy()[0]])
+print(vec2word[tf.argmax(logits, axis=1).numpy()[0]])
 
 # Create logger
 extension = datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
@@ -47,13 +55,12 @@ global_step = tf.compat.v1.train.get_or_create_global_step()
 for _ in range(epochs):
     with tf.GradientTape() as tape:
         logits = model(x)
-        loss = tf.compat.v1.losses.softmax_cross_entropy(one_hot, logits, reduction='none')
+        loss = tf.compat.v1.losses.softmax_cross_entropy(one_hot, logits)
         with tf.contrib.summary.always_record_summaries():
             tf.contrib.summary.scalar('loss', loss)
-        print(word2vec[tf.argmax(logits, axis=1).numpy()[0]])
+        print(vec2word[tf.argmax(logits, axis=1).numpy()[0]])
     
     # Calculate and apply gradients
     grads = tape.gradient(loss, model.weights)
     optim.apply_gradients(zip(grads, model.weights))
     global_step.assign_add(1)
-
